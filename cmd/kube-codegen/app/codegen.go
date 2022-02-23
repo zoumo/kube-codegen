@@ -19,6 +19,7 @@ import (
 	"github.com/zoumo/golib/cli/injection"
 	"github.com/zoumo/golib/cli/plugin"
 	"github.com/zoumo/golib/log"
+	"github.com/zoumo/make-rules/version"
 
 	"github.com/zoumo/kube-codegen/pkg/cli"
 )
@@ -35,6 +36,7 @@ func NewRootCommand() *cobra.Command {
 
 	root.AddCommand(NewCodegenCommand())
 	root.AddCommand(NewClientGenCommand())
+	root.AddCommand(version.NewCommand())
 	return root
 }
 
