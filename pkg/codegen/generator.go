@@ -351,7 +351,7 @@ func (c *CodeGenerator) genRegister(run *runner.Runner) error {
 }
 
 func (c *CodeGenerator) genOpenapi(run *runner.Runner) error {
-	generator := "openapi-gen"
+	generatorName := "openapi-gen"
 	inputs := []string{
 		"k8s.io/apimachinery/pkg/apis/meta/v1",
 		"k8s.io/apimachinery/pkg/api/resource",
@@ -373,10 +373,10 @@ func (c *CodeGenerator) genOpenapi(run *runner.Runner) error {
 		"--output-package", outputPackage,
 		"--report-filename", violations,
 	}
-	c.logger.Info("Generating", "generator", generator, "args", strings.Join(args, " "))
+	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err := run.RunCombinedOutput(args...)
 	if err != nil {
-		c.logger.Error(err, "failed to run generator", "generator", generator)
+		c.logger.Error(err, "failed to run generator", "generator", generatorName)
 		return err
 	}
 	return nil
