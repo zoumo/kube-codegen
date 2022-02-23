@@ -4,8 +4,7 @@ go 1.15
 
 require (
 	github.com/dave/jennifer v1.5.0
-	github.com/go-logr/logr v1.2.2
-	github.com/go-logr/zapr v1.2.3 // indirect
+	github.com/go-logr/logr v0.4.0
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/json-iterator/go v1.1.11 // indirect
@@ -16,7 +15,6 @@ require (
 	github.com/zoumo/goset v0.2.0
 	github.com/zoumo/make-rules v0.2.0
 	go.uber.org/multierr v1.7.0 // indirect
-	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/net v0.0.0-20210510120150-4163338589ed // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
@@ -26,6 +24,7 @@ require (
 
 replace (
 	github.com/go-logr/logr => github.com/go-logr/logr v0.4.0
+	github.com/go-logr/zapr => github.com/go-logr/zapr v0.4.0
 	github.com/spf13/cobra => github.com/spf13/cobra v1.1.1
 	golang.org/x/tools => golang.org/x/tools v0.0.0-20200616133436-c1934b75d054
 	k8s.io/api => k8s.io/api v0.20.2
