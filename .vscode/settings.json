@@ -1,0 +1,8 @@
+{
+	"licenser.author": "jim.zoumo@gmail.com",
+	"licenser.license": "AL2",
+	"go.toolsEnvVars": {
+		"GOIMPORTSTYLE": "auto",
+		"GOIMPORTLOCAL": "github.com/zoumo/kube-codegen"
+	},
+}
