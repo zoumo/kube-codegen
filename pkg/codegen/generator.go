@@ -89,6 +89,7 @@ func NewCodeGenerator(
 	enabledGenerators, disabledGenerators []string,
 	boilerplatePath, apisPath, clientPath string,
 	inputPackages []string,
+	clientsetDirName, informersDirName, listersDirName string,
 ) *CodeGenerator {
 	c := &CodeGenerator{
 		workspace:            workspace,
@@ -105,9 +106,9 @@ func NewCodeGenerator(
 		apisPath:         apisPath,
 		clientPath:       clientPath,
 		outputBase:       path.Join(workspace, "generated"),
-		clientsetDirName: "kubernetes",
-		listerDirName:    "listers",
-		informerDirName:  "informers",
+		clientsetDirName: clientsetDirName,
+		listerDirName:    listersDirName,
+		informerDirName:  informersDirName,
 	}
 
 	enabled, disabled := goset.NewSet(), goset.NewSet()
@@ -531,7 +532,8 @@ func (c *CodeGenerator) genClient(run *runner.Runner) error {
 	generatorName := "client-gen"
 
 	input := strings.Join(c.inputPackages, ",")
-	outputPackage := path.Join(c.workspaceModule, c.clientPath)
+	outputPackage := path.Join(c.workspaceModule, c.clientPath, c.clientsetDirName)
+	outputPackage, dirName := path.Split(outputPackage)
 
 	localClientsetPath := path.Join(c.workspace, c.clientPath, c.clientsetDirName)
 	outputClientsetPath := path.Join(c.outputBase, outputPackage, c.clientsetDirName)
@@ -543,7 +545,7 @@ func (c *CodeGenerator) genClient(run *runner.Runner) error {
 		"--go-header-file", c.boilerplatePath,
 		"--input-base", "",
 		"--input", input,
-		"--clientset-name", c.clientsetDirName,
+		"--clientset-name", dirName,
 		"--output-base", c.outputBase,
 		"--output-package", outputPackage,
 	}

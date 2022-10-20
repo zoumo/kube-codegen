@@ -103,6 +103,9 @@ func (c *codegenSubcommand) Run(args []string) error {
 		c.genOptions.apisPath,
 		c.genOptions.clientPath,
 		c.genOptions.inputPackages,
+		c.genOptions.clientsetDirName,
+		c.genOptions.informersDirName,
+		c.genOptions.listersDirName,
 	)
 
 	return generator.Run(c.generatorsOpt)

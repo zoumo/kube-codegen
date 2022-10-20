@@ -40,8 +40,11 @@ type genOptions struct {
 	groupVersionsOpt     []string
 	codeGeneratorVersion string
 
-	apisModule    string
-	inputPackages []string
+	apisModule       string
+	inputPackages    []string
+	clientsetDirName string
+	informersDirName string
+	listersDirName   string
 }
 
 func (c *genOptions) BindFlags(fs *pflag.FlagSet) {
@@ -52,6 +55,9 @@ func (c *genOptions) BindFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.apisPath, "apis-path", c.apisPath, "apis path relative to group-versions in apis-module, (e.g. pkg/apis). The whole api path will be '<apis-module>/<apis-path>/<group>/<version>'.")
 	fs.StringSliceVar(&c.groupVersionsOpt, "group-versions", c.groupVersionsOpt, "the groups and their versions in the format groupA:v1,groupA:v1,groupB:v1,groupC:v2 relative to '<apis-package>/<apis-path>'. Empty means all group versions")
 	fs.StringVar(&c.clientPath, "client-path", c.clientPath, "the relative generated client output path, (e.g. pkg/clients). If you want generate client,lister,informer, it should be set")
+	fs.StringVar(&c.clientsetDirName, "clientset-dir", "kubernetes", "output clientset dir repative to client-path, all clients will be generated in <client-path>/<clientset-dir>")
+	fs.StringVar(&c.informersDirName, "informers-dir", "informers", "output informers dir repative to client-path, all informers will be generated in <client-path>/<informers-dir>")
+	fs.StringVar(&c.listersDirName, "listers-dir", "listers", "output informers dir repative to client-path, all listers will be generated in <client-path>/<listers-dir>")
 }
 
 func (c *genOptions) SetDefault(workdir string) error {
