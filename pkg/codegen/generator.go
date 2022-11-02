@@ -383,13 +383,30 @@ func (c *CodeGenerator) genOpenapi(run *runner.Runner) error {
 	return nil
 }
 
+// getLocalInputPackagePaths convert inputPackages to inputPaths, it will
+// filter out input packages not belonging to local module.
+func (c *CodeGenerator) getLocalInputPackagePaths() []string {
+	inputPaths := []string{}
+	for _, inputPackage := range c.inputPackages {
+		if strings.HasPrefix(inputPackage, c.workspaceModule) {
+			relative := strings.TrimPrefix(inputPackage, c.workspaceModule)
+			inputPaths = append(inputPaths, path.Join(c.workspace, relative))
+		}
+	}
+	return inputPaths
+}
+
 func (c *CodeGenerator) genCRD(_ *runner.Runner) error {
 	generatorName := "crd-gen"
 	cmd := app.NewRootCommand()
 	args := []string{
 		"crd:headerFile=" + c.boilerplatePath + ",genCRD=true,genInstall=false",
-		"paths=" + path.Join(c.workspace, c.apisPath, "..."),
 		"output:crd:dir=" + path.Join(c.workspace, c.apisPath),
+		// "paths=" + path.Join(c.workspace, c.apisPath, "..."),
+	}
+	inputPaths := c.getLocalInputPackagePaths()
+	for _, inputPath := range inputPaths {
+		args = append(args, fmt.Sprintf("paths=%s", inputPath))
 	}
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	cmd.SetArgs(args)
@@ -401,8 +418,12 @@ func (c *CodeGenerator) genInstall(_ *runner.Runner) error {
 	cmd := app.NewRootCommand()
 	args := []string{
 		"crd:headerFile=" + c.boilerplatePath + ",genCRD=false,genInstall=true",
-		"paths=" + path.Join(c.workspace, c.apisPath, "..."),
 		"output:crd:dir=" + path.Join(c.workspace, c.apisPath),
+		// "paths=" + path.Join(c.workspace, c.apisPath, "..."),
+	}
+	inputPaths := c.getLocalInputPackagePaths()
+	for _, inputPath := range inputPaths {
+		args = append(args, fmt.Sprintf("paths=%s", inputPath))
 	}
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	cmd.SetArgs(args)
