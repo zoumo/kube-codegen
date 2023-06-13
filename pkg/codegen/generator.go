@@ -195,7 +195,7 @@ func (c *CodeGenerator) doGenerate(generators []string) error {
 }
 
 func (c *CodeGenerator) installCodeGenerator(name string) error {
-	_, err := c.goCmd.WithEnvs("GOBIN", path.Join(c.workspace, "bin")).RunCombinedOutput("get", "-v", fmt.Sprintf("k8s.io/code-generator/cmd/%s@%s", name, c.codeGeneratorVersion))
+	_, err := c.goCmd.WithEnvs("GOBIN", path.Join(c.workspace, "bin")).RunCombinedOutput("install", "-v", fmt.Sprintf("k8s.io/code-generator/cmd/%s@%s", name, c.codeGeneratorVersion))
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (c *CodeGenerator) installCodeGenerator(name string) error {
 }
 
 func (c *CodeGenerator) installProtocGenGoGo() error {
-	_, err := c.goCmd.WithEnvs("GOBIN", path.Join(c.workspace, "bin")).RunCombinedOutput("get", "-v", fmt.Sprintf("k8s.io/code-generator/cmd/go-to-protobuf/protoc-gen-gogo@%s", c.codeGeneratorVersion))
+	_, err := c.goCmd.WithEnvs("GOBIN", path.Join(c.workspace, "bin")).RunCombinedOutput("install", "-v", fmt.Sprintf("k8s.io/code-generator/cmd/go-to-protobuf/protoc-gen-gogo@%s", c.codeGeneratorVersion))
 	if err != nil {
 		return err
 	}
