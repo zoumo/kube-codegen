@@ -76,9 +76,11 @@ func (c *clientgenSubCommand) Run(args []string) error {
 		"",
 		c.genOptions.clientPath,
 		c.genOptions.inputPackages,
+		c.genOptions.inputInternalPackages,
 		c.genOptions.clientsetDirName,
 		c.genOptions.informersDirName,
 		c.genOptions.listersDirName,
+		c.genOptions.verbose,
 	)
 
 	// run all generators

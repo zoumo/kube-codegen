@@ -17,6 +17,7 @@ package codegen
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/otiai10/copy"
+	"github.com/spf13/afero"
 	"github.com/zoumo/goset"
 	"github.com/zoumo/make-rules/pkg/golang"
 	"github.com/zoumo/make-rules/pkg/runner"
@@ -69,7 +71,8 @@ type CodeGenerator struct {
 	disabledGenerators   []string
 	codeGeneratorVersion string
 
-	inputPackages []string
+	inputPackages         []string
+	inputInternalPackages []string
 
 	boilerplatePath  string
 	apisPath         string
@@ -79,6 +82,7 @@ type CodeGenerator struct {
 	informerDirName  string
 
 	outputBase string
+	verbose    int
 }
 
 func NewCodeGenerator(
@@ -88,27 +92,29 @@ func NewCodeGenerator(
 	codeGeneratorVersion string,
 	enabledGenerators, disabledGenerators []string,
 	boilerplatePath, apisPath, clientPath string,
-	inputPackages []string,
+	inputPackages, inputInternalPackage []string,
 	clientsetDirName, informersDirName, listersDirName string,
+	verbose int,
 ) *CodeGenerator {
 	c := &CodeGenerator{
-		workspace:            workspace,
-		workspaceModule:      workspaceModule,
-		logger:               logger,
-		goCmd:                runner.NewRunner("go"),
-		gomodHelper:          golang.NewGomodHelper(path.Join(workspace, "go.mod"), logger),
-		enabledGenerators:    make([]string, 0),
-		disabledGenerators:   make([]string, 0),
-		codeGeneratorVersion: codeGeneratorVersion,
-		inputPackages:        inputPackages,
-
-		boilerplatePath:  boilerplatePath,
-		apisPath:         apisPath,
-		clientPath:       clientPath,
-		outputBase:       path.Join(workspace, "generated"),
-		clientsetDirName: clientsetDirName,
-		listerDirName:    listersDirName,
-		informerDirName:  informersDirName,
+		workspace:             workspace,
+		workspaceModule:       workspaceModule,
+		logger:                logger,
+		goCmd:                 runner.NewRunner("go"),
+		gomodHelper:           golang.NewGomodHelper(path.Join(workspace, "go.mod"), logger),
+		enabledGenerators:     make([]string, 0),
+		disabledGenerators:    make([]string, 0),
+		codeGeneratorVersion:  codeGeneratorVersion,
+		inputPackages:         inputPackages,
+		inputInternalPackages: inputInternalPackage,
+		boilerplatePath:       boilerplatePath,
+		apisPath:              apisPath,
+		clientPath:            clientPath,
+		outputBase:            path.Join(workspace, "__output", "generated"),
+		clientsetDirName:      clientsetDirName,
+		listerDirName:         listersDirName,
+		informerDirName:       informersDirName,
+		verbose:               verbose,
 	}
 
 	enabled, disabled := goset.NewSet(), goset.NewSet()
@@ -183,6 +189,7 @@ func (c *CodeGenerator) doGenerate(generators []string) error {
 	c.logger.Info("before generating",
 		"generators", sorted,
 		"inputPackages", c.inputPackages,
+		"inputInternalPackages", c.inputInternalPackages,
 		"codeGeneratorVersion", c.codeGeneratorVersion,
 	)
 
@@ -268,7 +275,8 @@ func (c *CodeGenerator) prepareRunner(generator string) (*runner.Runner, error) 
 
 func (c *CodeGenerator) genDeepcopy(run *runner.Runner) error {
 	generatorName := "deepcopy-gen"
-	inputDirs := strings.Join(c.inputPackages, ",")
+	inputPackages := append(c.inputPackages, c.inputInternalPackages...)
+	inputDirs := strings.Join(inputPackages, ",")
 	outputPackage := path.Join(c.workspaceModule, c.apisPath)
 
 	args := []string{
@@ -279,6 +287,7 @@ func (c *CodeGenerator) genDeepcopy(run *runner.Runner) error {
 		"--output-file-base", "zz_generated.deepcopy",
 		"--bounding-dirs", path.Join(c.workspaceModule, c.apisPath),
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err := run.RunCombinedOutput(args...)
 	if err != nil {
@@ -300,7 +309,7 @@ func (c *CodeGenerator) genDefaulter(run *runner.Runner) error {
 		"--output-package", outputPackage,
 		"--output-file-base", "zz_generated.defaults",
 	}
-
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err := run.RunCombinedOutput(args...)
 	if err != nil {
@@ -312,7 +321,8 @@ func (c *CodeGenerator) genDefaulter(run *runner.Runner) error {
 
 func (c *CodeGenerator) genConversion(run *runner.Runner) error {
 	generatorName := "conversion-gen"
-	inputDirs := strings.Join(c.inputPackages, ",")
+	inputPackages := append(c.inputPackages, c.inputInternalPackages...)
+	inputDirs := strings.Join(inputPackages, ",")
 	outputPackage := path.Join(c.workspaceModule, c.apisPath)
 
 	args := []string{
@@ -322,6 +332,7 @@ func (c *CodeGenerator) genConversion(run *runner.Runner) error {
 		"--output-package", outputPackage,
 		"--output-file-base", "zz_generated.conversion",
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err := run.RunCombinedOutput(args...)
 	if err != nil {
@@ -342,6 +353,7 @@ func (c *CodeGenerator) genRegister(run *runner.Runner) error {
 		"--output-base", c.outputBase,
 		"--output-package", outputPackage,
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err := run.RunCombinedOutput(args...)
 	if err != nil {
@@ -374,6 +386,7 @@ func (c *CodeGenerator) genOpenapi(run *runner.Runner) error {
 		"--output-package", outputPackage,
 		"--report-filename", violations,
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err := run.RunCombinedOutput(args...)
 	if err != nil {
@@ -425,6 +438,7 @@ func (c *CodeGenerator) genInstall(_ *runner.Runner) error {
 	for _, inputPath := range inputPaths {
 		args = append(args, fmt.Sprintf("paths=%s", inputPath))
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	cmd.SetArgs(args)
 	return cmd.Execute()
@@ -540,6 +554,7 @@ func (c *CodeGenerator) genProtobuf(run *runner.Runner) error {
 		"--output-base", c.outputBase,
 		"--apimachinery-packages", strings.Join(apimachineries, ","),
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err = run.RunCombinedOutput(args...)
 	if err != nil {
@@ -570,6 +585,7 @@ func (c *CodeGenerator) genClient(run *runner.Runner) error {
 		"--output-base", c.outputBase,
 		"--output-package", outputPackage,
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err = run.RunCombinedOutput(args...)
 	if err != nil {
@@ -597,6 +613,7 @@ func (c *CodeGenerator) genLister(run *runner.Runner) error {
 		"--output-base", c.outputBase,
 		"--output-package", outputPackage,
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err = run.RunCombinedOutput(args...)
 	if err != nil {
@@ -622,6 +639,7 @@ func (c *CodeGenerator) genInformer(run *runner.Runner) error {
 		"--versioned-clientset-package", versionedClientsetPackage,
 		"--listers-package", listersPacakge,
 	}
+	args = c.appendArgs(args)
 	c.logger.Info(generatorName, "args", strings.Join(args, " "))
 	_, err := run.RunCombinedOutput(args...)
 	if err != nil {
@@ -631,7 +649,37 @@ func (c *CodeGenerator) genInformer(run *runner.Runner) error {
 	return nil
 }
 
+func (c *CodeGenerator) appendArgs(args []string) []string {
+	if c.verbose > 0 {
+		args = append(args, "--v", fmt.Sprint(c.verbose))
+	}
+	return args
+}
+
+// func copyRegister(logger logr.Logger, srcPrefix, disPrefix string) error {
+// 	return copyFiles(logger, srcPrefix, disPrefix, func(d fs.DirEntry) (bool, error) {
+// 		if d.Name() == "register.go" {
+// 			return true, nil
+// 		}
+// 		return false, nil
+// 	})
+// }
+
 func copyExpansions(logger logr.Logger, srcPrefix, dstPrefix string) error {
+	return copyFiles(logger, srcPrefix, dstPrefix, func(d fs.DirEntry) (bool, error) {
+		name := d.Name()
+		if name == "generated_expansion.go" || name == "expansion_generated.go" {
+			return false, nil
+		}
+		// *_expansion.go excludes generated_expansion.go
+		if strings.HasSuffix(name, "_expansion.go") {
+			return true, nil
+		}
+		return false, nil
+	})
+}
+
+func copyFiles(logger logr.Logger, srcPrefix, dstPrefix string, filter func(d fs.DirEntry) (bool, error)) error {
 	_, err := os.Stat(srcPrefix)
 	if os.IsNotExist(err) {
 		return nil
@@ -640,19 +688,19 @@ func copyExpansions(logger logr.Logger, srcPrefix, dstPrefix string) error {
 		return err
 	}
 
-	expansions, err := findExpansions(srcPrefix)
+	files, err := findFiles(afero.NewIOFS(afero.NewOsFs()), srcPrefix, filter)
 	if err != nil {
 		return err
 	}
-	for _, expansion := range expansions {
-		rel, err := filepath.Rel(srcPrefix, expansion)
+	for _, file := range files {
+		rel, err := filepath.Rel(srcPrefix, file)
 		if err != nil {
 			return err
 		}
 		target := filepath.Join(dstPrefix, rel)
 
-		logger.Info("copying expansions", "src", expansion, "dst", target)
-		if err = copy.Copy(expansion, target); err != nil {
+		logger.Info("copying", "src", file, "dst", target)
+		if err = copy.Copy(file, target); err != nil {
 			return err
 		}
 	}
@@ -660,27 +708,39 @@ func copyExpansions(logger logr.Logger, srcPrefix, dstPrefix string) error {
 }
 
 func findExpansions(root string) ([]string, error) {
-	expansions := []string{}
-	err := filepath.Walk(root, func(fpath string, info os.FileInfo, ierr error) error {
+	return findFiles(afero.NewIOFS(afero.NewOsFs()), root, func(d fs.DirEntry) (bool, error) {
+		name := d.Name()
+		if name == "generated_expansion.go" || name == "expansion_generated.go" {
+			return false, nil
+		}
+		// *_expansion.go excludes generated_expansion.go
+		if strings.HasSuffix(name, "_expansion.go") {
+			return true, nil
+		}
+		return false, nil
+	})
+}
+
+func findFiles(fsys fs.FS, root string, filter func(d fs.DirEntry) (bool, error)) ([]string, error) {
+	target := []string{}
+	err := fs.WalkDir(fsys, root, func(fpath string, d fs.DirEntry, ierr error) error {
 		if ierr != nil {
 			return ierr
 		}
 		if fpath == root {
 			return nil
 		}
-		if info.IsDir() {
+		if d.IsDir() {
 			return nil
 		}
-		if info.Name() == "generated_expansion.go" || info.Name() == "expansion_generated.go" {
-			return nil
+		var ok bool
+		ok, ierr = filter(d)
+		if ok {
+			target = append(target, fpath)
 		}
-		// *_expansion.go excludes generated_expansion.go
-		if strings.HasSuffix(info.Name(), "_expansion.go") {
-			expansions = append(expansions, fpath)
-		}
-		return nil
+		return ierr
 	})
-	return expansions, err
+	return target, err
 }
 
 func protoSafeOutermostPackage(name string) string {

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -23,6 +24,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 	"github.com/zoumo/goset"
 	"github.com/zoumo/make-rules/pkg/runner"
@@ -40,11 +42,13 @@ type genOptions struct {
 	groupVersionsOpt     []string
 	codeGeneratorVersion string
 
-	apisModule       string
-	inputPackages    []string
-	clientsetDirName string
-	informersDirName string
-	listersDirName   string
+	apisModule            string
+	inputPackages         []string
+	inputInternalPackages []string
+	clientsetDirName      string
+	informersDirName      string
+	listersDirName        string
+	verbose               int
 }
 
 func (c *genOptions) BindFlags(fs *pflag.FlagSet) {
@@ -58,6 +62,7 @@ func (c *genOptions) BindFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.clientsetDirName, "clientset-dir", "kubernetes", "output clientset dir repative to client-path, all clients will be generated in <client-path>/<clientset-dir>")
 	fs.StringVar(&c.informersDirName, "informers-dir", "informers", "output informers dir repative to client-path, all informers will be generated in <client-path>/<informers-dir>")
 	fs.StringVar(&c.listersDirName, "listers-dir", "listers", "output informers dir repative to client-path, all listers will be generated in <client-path>/<listers-dir>")
+	fs.IntVar(&c.verbose, "verbose", 0, "number for the generator log level verbosity")
 }
 
 func (c *genOptions) SetDefault(workdir string) error {
@@ -75,12 +80,13 @@ func (c *genOptions) SetDefault(workdir string) error {
 		c.apisModule = c.module
 	}
 
-	inputPackages, err := c.inputAPIPackages(workdir)
+	inputPackages, inputInternalPackage, err := c.inputAPIPackages(workdir)
 	if err != nil {
 		return err
 	}
 
 	c.inputPackages = inputPackages
+	c.inputInternalPackages = inputInternalPackage
 
 	return nil
 }
@@ -100,7 +106,7 @@ func (c *genOptions) Validate() error {
 	return nil
 }
 
-func (c *genOptions) inputAPIPackages(workdir string) (inputPackages []string, err error) {
+func (c *genOptions) inputAPIPackages(workdir string) (inputPackages, inputInternalPackages []string, err error) {
 	var apiModuleDir string
 	if c.apisModule == c.module {
 		apiModuleDir = workdir
@@ -108,26 +114,30 @@ func (c *genOptions) inputAPIPackages(workdir string) (inputPackages []string, e
 		goCmd := runner.NewRunner("go")
 		bytes, err := goCmd.RunOutput("list", "-f", "{{ .Dir }}", "-m", c.apisModule)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		apiModuleDir = strings.TrimSpace(string(bytes))
 	}
 
 	root := path.Join(apiModuleDir, c.apisPath)
 	// find all apis group version package
-	allGroupVersions, err := findGroupVersion(root)
+	allGroupVersions, allInternalGroupVersions, err := findGroupVersion(afero.NewIOFS(afero.NewOsFs()), root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(c.groupVersionsOpt) == 0 {
 		for _, gv := range allGroupVersions {
 			inputPackages = append(inputPackages, path.Join(c.apisModule, c.apisPath, gv))
 		}
-		return inputPackages, nil
+		for _, gv := range allInternalGroupVersions {
+			inputInternalPackages = append(inputInternalPackages, path.Join(c.apisModule, c.apisPath, gv))
+		}
+		return inputPackages, inputInternalPackages, nil
 	}
 
 	allGVSet := goset.NewSetFromStrings(allGroupVersions)
+	allInternalGVSet := goset.NewSetFromStrings(allInternalGroupVersions)
 	// filter group version
 	for _, gv := range c.groupVersionsOpt {
 		if !allGVSet.Contains(gv) {
@@ -135,23 +145,30 @@ func (c *genOptions) inputAPIPackages(workdir string) (inputPackages []string, e
 		}
 		inputPackages = append(inputPackages, path.Join(c.apisModule, c.apisPath, gv))
 	}
-	return inputPackages, nil
+	for _, gv := range c.groupVersionsOpt {
+		if !allInternalGVSet.Contains(gv) {
+			continue
+		}
+		inputInternalPackages = append(inputInternalPackages, path.Join(c.apisModule, c.apisPath, gv))
+	}
+	return inputPackages, inputInternalPackages, nil
 }
 
 // findGroupVersion walk into apis root dir, and find all group/version under this apis path
-func findGroupVersion(root string) ([]string, error) {
+func findGroupVersion(fsys fs.FS, root string) ([]string, []string, error) {
 	groupVersions := []string{}
-	err := filepath.Walk(root, func(fpath string, info os.FileInfo, ierr error) error {
+	internalGroupVersion := []string{}
+	groups := goset.NewSet()
+	err := fs.WalkDir(fsys, root, func(fpath string, d fs.DirEntry, ierr error) error {
 		if ierr != nil {
 			return ierr
 		}
 		if fpath == root {
 			return nil
 		}
-		if !info.IsDir() {
+		if !d.IsDir() {
 			return nil
 		}
-
 		sub := strings.TrimPrefix(fpath, root+"/")
 		if len(strings.Split(sub, "/")) != 2 {
 			return nil
@@ -160,13 +177,57 @@ func findGroupVersion(root string) ([]string, error) {
 		// sub = group/version
 		if versionRegexp.MatchString(path.Base(sub)) {
 			groupVersions = append(groupVersions, sub)
+			tokens := strings.Split(sub, "/")
+			groups.Add(tokens[0]) //nolint
 		}
 		return filepath.SkipDir
 	})
+
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return groupVersions, nil
+
+	var rangeErr error
+	groups.Range(func(_ int, elem interface{}) bool {
+		group := elem.(string)
+		path := filepath.Join(root, group)
+		hasGoFile, err := goFileExists(fsys, path)
+		if err != nil {
+			rangeErr = err
+			return false
+		}
+		if hasGoFile {
+			// internal version
+			internalGroupVersion = append(internalGroupVersion, group)
+		}
+		return true
+	})
+
+	if rangeErr != nil {
+		return nil, nil, rangeErr
+	}
+	return groupVersions, internalGroupVersion, err
+}
+
+func goFileExists(fsys fs.FS, root string) (bool, error) {
+	got := false
+	oerr := fs.WalkDir(fsys, root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == root {
+			return nil
+		}
+		if d.IsDir() {
+			return filepath.SkipDir
+		}
+		if strings.HasSuffix(d.Name(), ".go") {
+			got = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return got, oerr
 }
 
 // module and goMod arg just enough of the output of `go mod edit -json` for our purposes
