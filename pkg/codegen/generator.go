@@ -140,7 +140,7 @@ func (c *CodeGenerator) Run(generators []string) error {
 
 	// detect code-generator version
 	if c.codeGeneratorVersion == "" {
-		bytes, err := c.goCmd.RunOutput("list", "-f", "{{if .Replace}}{{.Replace.Version}}{{else}}{{.Version}}{{end}}", "-m", "k8s.io/code-generator")
+		bytes, err := c.goCmd.RunOutput("list", "-mod", "readonly", "-f", "{{if .Replace}}{{.Replace.Version}}{{else}}{{.Version}}{{end}}", "-m", "k8s.io/code-generator")
 		if err != nil {
 			return err
 		}
