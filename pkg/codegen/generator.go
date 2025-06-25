@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -100,7 +99,7 @@ func NewCodeGenerator(
 		workspace:             workspace,
 		workspaceModule:       workspaceModule,
 		logger:                logger,
-		goCmd:                 runner.NewRunner("go"),
+		goCmd:                 runner.NewRunner("go").WithEnvs("GOWORK", "off"), // disable go work
 		gomodHelper:           golang.NewGomodHelper(path.Join(workspace, "go.mod"), logger),
 		enabledGenerators:     make([]string, 0),
 		disabledGenerators:    make([]string, 0),
@@ -375,7 +374,7 @@ func (c *CodeGenerator) genOpenapi(run *runner.Runner) error {
 	inputDirs := strings.Join(append(inputs, c.inputPackages...), ",")
 	outputPackage := path.Join(c.workspaceModule, c.apisPath, "generated/openapi")
 	violations := path.Join(c.workspace, c.apisPath, "generated/openapi/violations.report")
-	if err := os.MkdirAll(path.Dir(violations), 0755); err != nil {
+	if err := os.MkdirAll(path.Dir(violations), 0o755); err != nil {
 		return err
 	}
 
@@ -446,8 +445,9 @@ func (c *CodeGenerator) genInstall(_ *runner.Runner) error {
 
 // create all modules symlinks in temp dir for protobuf generator
 func (c *CodeGenerator) linkAllModulesInTempDir() (string, error) {
-	tempDir, _ := ioutil.TempDir("", "proto-gen.*")
+	tempDir, _ := os.MkdirTemp("", "proto-gen.*")
 
+	c.logger.Info("link all modules in temp dir", "tempDir", tempDir)
 	_, err := c.goCmd.RunCombinedOutput("mod", "download")
 	if err != nil {
 		return "", err
@@ -467,7 +467,7 @@ func (c *CodeGenerator) linkAllModulesInTempDir() (string, error) {
 	uniqDirs := allDirs.ToStrings()
 	sort.Strings(uniqDirs)
 	for _, dir := range uniqDirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "", err
 		}
 	}
@@ -707,19 +707,19 @@ func copyFiles(logger logr.Logger, srcPrefix, dstPrefix string, filter func(d fs
 	return nil
 }
 
-func findExpansions(root string) ([]string, error) {
-	return findFiles(afero.NewIOFS(afero.NewOsFs()), root, func(d fs.DirEntry) (bool, error) {
-		name := d.Name()
-		if name == "generated_expansion.go" || name == "expansion_generated.go" {
-			return false, nil
-		}
-		// *_expansion.go excludes generated_expansion.go
-		if strings.HasSuffix(name, "_expansion.go") {
-			return true, nil
-		}
-		return false, nil
-	})
-}
+// func findExpansions(root string) ([]string, error) {
+// 	return findFiles(afero.NewIOFS(afero.NewOsFs()), root, func(d fs.DirEntry) (bool, error) {
+// 		name := d.Name()
+// 		if name == "generated_expansion.go" || name == "expansion_generated.go" {
+// 			return false, nil
+// 		}
+// 		// *_expansion.go excludes generated_expansion.go
+// 		if strings.HasSuffix(name, "_expansion.go") {
+// 			return true, nil
+// 		}
+// 		return false, nil
+// 	})
+// }
 
 func findFiles(fsys fs.FS, root string, filter func(d fs.DirEntry) (bool, error)) ([]string, error) {
 	target := []string{}
@@ -769,11 +769,13 @@ func EnabledGenerators(defaultEnabledGenerators, defaultDisabledGenerators, gene
 		if len(opt) == 0 {
 			continue
 		}
-		if opt[0] == '-' {
+
+		switch opt[0] {
+		case '-':
 			disabled.Add(opt[1:]) //nolint
-		} else if opt[0] == '+' {
+		case '+':
 			enabled.Add(opt[1:]) //nolint
-		} else {
+		default:
 			target.Add(opt) //nolint
 		}
 	}
