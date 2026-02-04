@@ -16,16 +16,10 @@ package app
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/zoumo/golib/cli/injection"
-	"github.com/zoumo/golib/cli/plugin"
-	"github.com/zoumo/golib/log"
+	gcli "github.com/zoumo/golib/cli"
 	"github.com/zoumo/make-rules/version"
 
-	"github.com/zoumo/kube-codegen/pkg/cli"
-)
-
-var (
-	genLogger = log.Log.WithName("kubegen")
+	kubecli "github.com/zoumo/kube-codegen/pkg/cli"
 )
 
 func NewRootCommand() *cobra.Command {
@@ -41,22 +35,13 @@ func NewRootCommand() *cobra.Command {
 }
 
 func NewCodegenCommand() *cobra.Command {
-	cmd := plugin.NewCobraSubcommandOrDie(
-		cli.NewCodeGenSubcommand(),
-		injection.InjectLogger(genLogger.WithName("code-gen")),
-		injection.InjectWorkspace(),
-	)
-
+	cmd := gcli.NewCobraCommand(kubecli.NewCodeGenSubcommand())
 	cmd.Short = "code-gen runs golang code-generators for apis in local repository, used to implement Kubernetes-style API types."
 	return cmd
 }
 
 func NewClientGenCommand() *cobra.Command {
-	cmd := plugin.NewCobraSubcommandOrDie(
-		cli.NewClientGenSubcommand(),
-		injection.InjectLogger(genLogger.WithName("client-gen")),
-		injection.InjectWorkspace(),
-	)
+	cmd := gcli.NewCobraCommand(kubecli.NewClientGenSubcommand())
 	cmd.Short = "client-gen runs client-gen,lister-gen,informer-gen code-generators for apis in local or remote repository, used to implement Kubernetes-style clients sdk."
 	return cmd
 }

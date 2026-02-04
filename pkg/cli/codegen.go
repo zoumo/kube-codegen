@@ -17,19 +17,19 @@ package cli
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/zoumo/golib/cli/injection"
-	"github.com/zoumo/golib/cli/plugin"
+	"github.com/zoumo/golib/cli"
 	"github.com/zoumo/goset"
 
 	"github.com/zoumo/kube-codegen/pkg/codegen"
 )
 
-func NewCodeGenSubcommand() plugin.Subcommand {
+func NewCodeGenSubcommand() cli.Command {
 	c := &codegenSubcommand{
-		DefaultInjectionMixin: &injection.DefaultInjectionMixin{},
-		generatorsOpt:         make([]string, 0),
-		genOptions:            &genOptions{},
+		CommonOptions:   &cli.CommonOptions{},
+		generatorsOpt:   make([]string, 0),
+		genOptions:      &genOptions{},
 	}
 
 	c.enabledGenerators = []string{
@@ -52,7 +52,7 @@ func NewCodeGenSubcommand() plugin.Subcommand {
 }
 
 type codegenSubcommand struct {
-	*injection.DefaultInjectionMixin
+	*cli.CommonOptions
 
 	enabledGenerators  []string
 	disabledGenerators []string
@@ -71,8 +71,13 @@ func (c *codegenSubcommand) BindFlags(fs *pflag.FlagSet) {
 	fs.StringSliceVar(&c.generatorsOpt, "generators", nil, fmt.Sprintf("comma-separated list of generators. generater prefixed with '-' are not generated, generator prefixed with '+' will be generated additionally. e.g. -crd will disable crd generator.  (default generators, enabled: %v, disabled: %v)", c.enabledGenerators, c.disabledGenerators))
 }
 
-func (c *codegenSubcommand) PreRun(args []string) error {
-	if err := c.genOptions.SetDefault(c.Workspace); err != nil {
+func (c *codegenSubcommand) Complete(cmd *cobra.Command, args []string) error {
+	if err := c.CommonOptions.Complete(cmd, args); err != nil {
+		return err
+	}
+
+	c.genOptions.Workdir = c.Workspace
+	if err := c.genOptions.Complete(cmd, args); err != nil {
 		return err
 	}
 
@@ -84,14 +89,14 @@ func (c *codegenSubcommand) PreRun(args []string) error {
 		}
 	}
 
-	if err := c.genOptions.Validate(); err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func (c *codegenSubcommand) Run(args []string) error {
+func (c *codegenSubcommand) Validate() error {
+	return c.genOptions.Validate()
+}
+
+func (c *codegenSubcommand) Run(cmd *cobra.Command, args []string) error {
 	generator := codegen.NewCodeGenerator(
 		c.Workspace,
 		c.genOptions.module,

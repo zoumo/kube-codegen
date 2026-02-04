@@ -16,15 +16,16 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"io/fs"
 
 	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/zoumo/goset"
 	"github.com/zoumo/make-rules/pkg/runner"
@@ -35,6 +36,8 @@ var (
 )
 
 type genOptions struct {
+	Workdir string
+
 	module               string
 	boilerplatePath      string
 	apisPath             string
@@ -65,11 +68,13 @@ func (c *genOptions) BindFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&c.verbose, "verbose", 0, "number for the generator log level verbosity")
 }
 
-func (c *genOptions) SetDefault(workdir string) error {
+func (c *genOptions) Complete(cmd *cobra.Command, args []string) error {
+	_, _ = cmd, args
+
 	// Try to guess repository if flag is not set.
 	if len(c.module) == 0 {
-		// true to guess repo from go mod
-		repoPath, err := FindGoModulePath(true)
+		// guess repo from go mod
+		repoPath, err := FindGoModulePath()
 		if err != nil {
 			return fmt.Errorf("failed to find go module from mod, you must provide repo name, please set the flag --repo, err: %v", err)
 		}
@@ -80,7 +85,7 @@ func (c *genOptions) SetDefault(workdir string) error {
 		c.apisModule = c.module
 	}
 
-	inputPackages, inputInternalPackage, err := c.inputAPIPackages(workdir)
+	inputPackages, inputInternalPackage, err := c.inputAPIPackages(c.Workdir)
 	if err != nil {
 		return err
 	}
@@ -239,12 +244,10 @@ type module struct {
 }
 
 // FindGoModulePath finds the path of the current module, if present.
-func FindGoModulePath(forceModules bool) (string, error) {
+func FindGoModulePath() (string, error) {
 	cmd := exec.Command("go", "mod", "edit", "-json")
 	cmd.Env = append(cmd.Env, os.Environ()...)
-	if forceModules {
-		cmd.Env = append(cmd.Env, "GO111MODULE=on" /* turn on modules just for these commands */)
-	}
+	cmd.Env = append(cmd.Env, "GO111MODULE=on" /* turn on modules just for these commands */)
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, isExitErr := err.(*exec.ExitError); isExitErr {

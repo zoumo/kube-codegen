@@ -15,25 +15,24 @@
 package cli
 
 import (
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/zoumo/golib/cli/plugin"
+	"github.com/zoumo/golib/cli"
 	"github.com/zoumo/make-rules/pkg/runner"
 
 	"github.com/zoumo/kube-codegen/pkg/codegen"
-
-	"github.com/zoumo/golib/cli/injection"
 )
 
-func NewClientGenSubcommand() plugin.Subcommand {
+func NewClientGenSubcommand() cli.Command {
 	return &clientgenSubCommand{
-		DefaultInjectionMixin: injection.NewDefaultInjectionMixin(),
-		goCmd:                 runner.NewRunner("go"),
-		genOptions:            &genOptions{},
+		CommonOptions: &cli.CommonOptions{},
+		goCmd:         runner.NewRunner("go"),
+		genOptions:    &genOptions{},
 	}
 }
 
 type clientgenSubCommand struct {
-	*injection.DefaultInjectionMixin
+	*cli.CommonOptions
 
 	goCmd *runner.Runner
 
@@ -48,12 +47,13 @@ func (c *clientgenSubCommand) BindFlags(fs *pflag.FlagSet) {
 	c.genOptions.BindFlags(fs)
 }
 
-func (c *clientgenSubCommand) PreRun(args []string) error {
-	if err := c.genOptions.SetDefault(c.Workspace); err != nil {
+func (c *clientgenSubCommand) Complete(cmd *cobra.Command, args []string) error {
+	if err := c.CommonOptions.Complete(cmd, args); err != nil {
 		return err
 	}
 
-	if err := c.genOptions.Validate(); err != nil {
+	c.genOptions.Workdir = c.Workspace
+	if err := c.genOptions.Complete(cmd, args); err != nil {
 		return err
 	}
 
@@ -64,7 +64,11 @@ func (c *clientgenSubCommand) PreRun(args []string) error {
 	return nil
 }
 
-func (c *clientgenSubCommand) Run(args []string) error {
+func (c *clientgenSubCommand) Validate() error {
+	return c.genOptions.Validate()
+}
+
+func (c *clientgenSubCommand) Run(cmd *cobra.Command, args []string) error {
 	generator := codegen.NewCodeGenerator(
 		c.Workspace,
 		c.genOptions.module,

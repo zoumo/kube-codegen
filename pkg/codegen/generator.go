@@ -24,9 +24,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-logr/logr"
 	"github.com/otiai10/copy"
 	"github.com/spf13/afero"
+	"github.com/zoumo/golib/log"
 	"github.com/zoumo/goset"
 	"github.com/zoumo/make-rules/pkg/golang"
 	"github.com/zoumo/make-rules/pkg/runner"
@@ -62,7 +62,7 @@ var (
 type CodeGenerator struct {
 	workspace       string
 	workspaceModule string
-	logger          logr.Logger
+	logger          log.Logger
 
 	goCmd                *runner.Runner
 	gomodHelper          *golang.GomodHelper
@@ -87,7 +87,7 @@ type CodeGenerator struct {
 func NewCodeGenerator(
 	workspace string,
 	workspaceModule string,
-	logger logr.Logger,
+	logger log.Logger,
 	codeGeneratorVersion string,
 	enabledGenerators, disabledGenerators []string,
 	boilerplatePath, apisPath, clientPath string,
@@ -656,7 +656,7 @@ func (c *CodeGenerator) appendArgs(args []string) []string {
 	return args
 }
 
-// func copyRegister(logger logr.Logger, srcPrefix, disPrefix string) error {
+// func copyRegister(logger log.Logger, srcPrefix, disPrefix string) error {
 // 	return copyFiles(logger, srcPrefix, disPrefix, func(d fs.DirEntry) (bool, error) {
 // 		if d.Name() == "register.go" {
 // 			return true, nil
@@ -665,7 +665,7 @@ func (c *CodeGenerator) appendArgs(args []string) []string {
 // 	})
 // }
 
-func copyExpansions(logger logr.Logger, srcPrefix, dstPrefix string) error {
+func copyExpansions(logger log.Logger, srcPrefix, dstPrefix string) error {
 	return copyFiles(logger, srcPrefix, dstPrefix, func(d fs.DirEntry) (bool, error) {
 		name := d.Name()
 		if name == "generated_expansion.go" || name == "expansion_generated.go" {
@@ -679,7 +679,7 @@ func copyExpansions(logger logr.Logger, srcPrefix, dstPrefix string) error {
 	})
 }
 
-func copyFiles(logger logr.Logger, srcPrefix, dstPrefix string, filter func(d fs.DirEntry) (bool, error)) error {
+func copyFiles(logger log.Logger, srcPrefix, dstPrefix string, filter func(d fs.DirEntry) (bool, error)) error {
 	_, err := os.Stat(srcPrefix)
 	if os.IsNotExist(err) {
 		return nil
